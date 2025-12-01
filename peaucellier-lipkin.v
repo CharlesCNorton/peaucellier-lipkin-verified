@@ -1085,12 +1085,45 @@ Proof.
   apply linkage_k_sq_pos; assumption.
 Qed.
 
-(** The constraint that B lies on a circle through O *)
+(** The constraint that B lies on a circle through O.
+
+    Physical interpretation: In the complete Peaucellier-Lipkin mechanism,
+    there is a SECOND fixed pivot point M (in addition to O). A crank arm
+    of length r = |MO| connects M to B. Since B is constrained to be
+    distance r from M, and O is also distance r from M, point B traces
+    a circle that passes through O.
+
+    This second pivot is what converts rotary input (turning the crank)
+    into the straight-line output at D. Without it, B could move freely
+    and D would not trace a line.
+
+    M = center of input circle (second fixed pivot)
+    r = radius of input circle = |MO| = |MB|
+*)
 Definition B_on_circle_through_O (P : PeaucellierLinkage) (M : Point) (r : R) : Prop :=
   let C := mkCircle M r in
   dist (pl_O P) M = r /\
   r > 0 /\
   circle_passes_through C (pl_B P).
+
+(** The second pivot as an explicit link constraint *)
+Definition second_pivot_constraint (O B M : Point) (r : R) : Prop :=
+  dist O M = r /\
+  dist B M = r /\
+  r > 0.
+
+(** The second pivot constraint implies B is on a circle through O *)
+Lemma second_pivot_implies_circle : forall O B M r,
+  second_pivot_constraint O B M r ->
+  let C := mkCircle M r in
+  dist O M = r /\ r > 0 /\ circle_passes_through C B.
+Proof.
+  intros O B M r [HOM [HBM Hr]].
+  split; [exact HOM |].
+  split; [exact Hr |].
+  unfold circle_passes_through, circle_center, circle_radius. simpl.
+  rewrite dist_sym. rewrite dist_sym in HBM. exact HBM.
+Qed.
 
 (** D satisfies the perpendicular line condition for the inversion image.
     This is the key fact that connects the product formula to the line theorem.
@@ -1460,6 +1493,34 @@ Proof.
   - rewrite HDA. rewrite dist_sq_sym. rewrite HCD. reflexivity.
 Qed.
 
+(** Corollary for the linkage record type *)
+Corollary linkage_OBD_collinear_record : forall P,
+  linkage_valid_sq P ->
+  pl_A P <> pl_C P ->
+  OBD_collinear P.
+Proof.
+  intros P Hvalid HAneqC.
+  destruct Hvalid as [HOA [HOC [HAB [HBC [HCD [HDA [HLs Hs]]]]]]].
+  unfold OBD_collinear.
+  apply linkage_OBD_collinear with (L := pl_L P) (s := pl_s P) (A := pl_A P) (C := pl_C P).
+  - exact HOA.
+  - exact HOC.
+  - exact HAB.
+  - exact HBC.
+  - exact HCD.
+  - exact HDA.
+  - unfold px, py.
+    destruct (pl_A P) as [ax ay], (pl_C P) as [cx cy].
+    simpl.
+    destruct (Req_dec ax cx) as [Hxeq | Hxneq].
+    + right.
+      intros Hyeq.
+      apply HAneqC.
+      rewrite Hxeq, Hyeq.
+      reflexivity.
+    + left. exact Hxneq.
+Qed.
+
 (** * Section 11.4: Connecting Collinearity to the Straight-Line Property *)
 
 (** With `linkage_OBD_collinear` we've proven that O, B, D are collinear
@@ -1575,6 +1636,72 @@ Proof.
   exact H.
 Qed.
 
+(** AC symmetry forced: In standard position, the rhombus constraints force
+    A and C to have the same x-coordinate (midpoint of B and D).
+    Combined with |OA| = |OC|, this forces y-coordinate symmetry. *)
+Lemma AC_x_coord_forced : forall A B C D s,
+  snd B = 0 -> snd D = 0 ->
+  fst B <> fst D ->
+  dist_sq A B = s * s ->
+  dist_sq B C = s * s ->
+  dist_sq C D = s * s ->
+  dist_sq D A = s * s ->
+  s > 0 ->
+  fst A = fst C.
+Proof.
+  intros A B C D s HB2 HD2 HBneqD HAB HBC HCD HDA Hs.
+  unfold dist_sq, px, py, Rsqr in *.
+  rewrite HB2, HD2 in *.
+  assert (HAeq: (fst A - fst B) * (fst A - fst B) + snd A * snd A = s * s) by nra.
+  assert (HDeq: (fst A - fst D) * (fst A - fst D) + snd A * snd A = s * s) by nra.
+  assert (HCBeq: (fst C - fst B) * (fst C - fst B) + snd C * snd C = s * s) by nra.
+  assert (HCDeq: (fst C - fst D) * (fst C - fst D) + snd C * snd C = s * s) by nra.
+  assert (HAB_eq_HAD: (fst A - fst B) * (fst A - fst B) = (fst A - fst D) * (fst A - fst D)) by nra.
+  assert (HCB_eq_HCD: (fst C - fst B) * (fst C - fst B) = (fst C - fst D) * (fst C - fst D)) by nra.
+  apply Rsqr_eq in HAB_eq_HAD. unfold Rsqr in HAB_eq_HAD.
+  apply Rsqr_eq in HCB_eq_HCD. unfold Rsqr in HCB_eq_HCD.
+  destruct HAB_eq_HAD as [HA1 | HA2].
+  - assert (fst B = fst D) by lra. contradiction.
+  - destruct HCB_eq_HCD as [HC1 | HC2].
+    + assert (fst B = fst D) by lra. contradiction.
+    + lra.
+Qed.
+
+(** Full AC symmetry: Both x-coord equality and y-coord symmetry.
+    Requires non-degeneracy: A ≠ C (real rhombus, not collapsed). *)
+Lemma AC_symmetry_forced : forall O A B C D L s,
+  fst O = 0 -> snd O = 0 ->
+  snd B = 0 -> snd D = 0 ->
+  fst B <> fst D ->
+  dist_sq O A = L * L ->
+  dist_sq O C = L * L ->
+  dist_sq A B = s * s ->
+  dist_sq B C = s * s ->
+  dist_sq C D = s * s ->
+  dist_sq D A = s * s ->
+  L > s -> s > 0 ->
+  A <> C ->
+  fst A = fst C /\ snd A = - snd C.
+Proof.
+  intros O A B C D L s HO1 HO2 HB2 HD2 HBneqD HOA HOC HAB HBC HCD HDA HLs Hs HAneqC.
+  assert (Hfst: fst A = fst C).
+  { apply (AC_x_coord_forced A B C D s); assumption. }
+  split.
+  - exact Hfst.
+  - assert (Hsym: snd A = snd C \/ snd A = - snd C).
+    { unfold dist_sq, px, py, Rsqr in HOA, HOC.
+      rewrite HO1, HO2 in HOA, HOC. simpl in HOA, HOC.
+      apply (equal_dist_origin_symmetry A C L).
+      - unfold dist_sq, px, py, Rsqr. simpl. nra.
+      - unfold dist_sq, px, py, Rsqr. simpl. nra.
+      - exact Hfst. }
+    destruct Hsym as [Heq | Hneq].
+    + exfalso. apply HAneqC.
+      destruct A as [ax ay], C as [cx cy]. simpl in *.
+      f_equal; [exact Hfst | exact Heq].
+    + exact Hneq.
+Qed.
+
 (** Third weakening: Express in terms of dist_sq products *)
 Lemma product_formula_dist_sq : forall O A B C D L s,
   fst O = 0 -> snd O = 0 ->
@@ -1666,6 +1793,163 @@ Proof.
   intros T P Q HT. apply HT.
 Qed.
 
+(** * Section 11.6.1: Concrete Rigid Transformations *)
+
+(** Translation by a vector *)
+Definition translate (v : Point) (P : Point) : Point :=
+  (fst P + fst v, snd P + snd v).
+
+(** Translation preserves distances *)
+Lemma translate_is_rigid : forall v, is_rigid (translate v).
+Proof.
+  intros v P Q.
+  unfold translate, dist_sq, px, py, Rsqr. simpl.
+  ring.
+Qed.
+
+(** Translation moves origin to any point *)
+Lemma translate_origin : forall P,
+  translate (- fst P, - snd P) P = (0, 0).
+Proof.
+  intros P. unfold translate. simpl.
+  f_equal; ring.
+Qed.
+
+(** Rotation about origin by angle with cosine c and sine s where c² + s² = 1 *)
+Definition rotate (c s : R) (P : Point) : Point :=
+  (c * fst P - s * snd P, s * fst P + c * snd P).
+
+(** Rotation preserves distances when c² + s² = 1 *)
+Lemma rotate_preserves_dist_sq : forall c s P Q,
+  c * c + s * s = 1 ->
+  dist_sq (rotate c s P) (rotate c s Q) = dist_sq P Q.
+Proof.
+  intros c s P Q Hunit.
+  unfold rotate, dist_sq, px, py, Rsqr. simpl.
+  set (px_ := fst P). set (py_ := snd P).
+  set (qx := fst Q). set (qy := snd Q).
+  replace ((c * qx - s * qy - (c * px_ - s * py_)) *
+           (c * qx - s * qy - (c * px_ - s * py_)) +
+           (s * qx + c * qy - (s * px_ + c * py_)) *
+           (s * qx + c * qy - (s * px_ + c * py_)))
+    with ((c*c + s*s) * ((qx - px_) * (qx - px_) + (qy - py_) * (qy - py_)))
+    by ring.
+  rewrite Hunit. ring.
+Qed.
+
+(** Rotation is rigid when c² + s² = 1 *)
+Lemma rotate_is_rigid : forall c s,
+  c * c + s * s = 1 -> is_rigid (rotate c s).
+Proof.
+  intros c s Hunit P Q.
+  apply rotate_preserves_dist_sq. exact Hunit.
+Qed.
+
+(** Rotation maps point (r, 0) to (r*c, r*s) *)
+Lemma rotate_xaxis : forall c s r,
+  rotate c s (r, 0) = (r * c, r * s).
+Proof.
+  intros c s r. unfold rotate. simpl.
+  f_equal; ring.
+Qed.
+
+(** Composition of rigid transforms is rigid *)
+Lemma compose_rigid : forall T1 T2,
+  is_rigid T1 -> is_rigid T2 -> is_rigid (fun P => T2 (T1 P)).
+Proof.
+  intros T1 T2 H1 H2 P Q.
+  rewrite H2. rewrite H1. reflexivity.
+Qed.
+
+(** * Section 11.6.2: Constructing the Normalizing Transform *)
+
+(** The normalizing transform:
+    1. Translate O to origin
+    2. Rotate so that B lies on the x-axis
+    This puts collinear O, B, D into standard position. *)
+
+Definition normalize_transform (O B : Point) (P : Point) : Point :=
+  let v := (- fst O, - snd O) in
+  let B' := translate v B in
+  let r := sqrt (fst B' * fst B' + snd B' * snd B') in
+  let c := fst B' / r in
+  let s := - snd B' / r in
+  rotate c s (translate v P).
+
+(** After normalization, O maps to origin *)
+Lemma normalize_O_at_origin : forall O B,
+  normalize_transform O B O = (0, 0).
+Proof.
+  intros O B.
+  unfold normalize_transform, translate, rotate. simpl.
+  f_equal; ring.
+Qed.
+
+(** After normalization, B lies on x-axis (y-coordinate is 0) *)
+Lemma normalize_B_on_xaxis : forall O B,
+  dist O B > 0 ->
+  snd (normalize_transform O B B) = 0.
+Proof.
+  intros O B Hdist.
+  unfold normalize_transform, translate, rotate. simpl.
+  assert (Hr_pos: sqrt ((fst B + - fst O) * (fst B + - fst O) +
+                        (snd B + - snd O) * (snd B + - snd O)) > 0).
+  { apply sqrt_lt_R0.
+    assert (Hdsq: dist_sq O B > 0) by (apply dist_pos_implies_dist_sq_pos; exact Hdist).
+    unfold dist_sq, px, py, Rsqr in Hdsq.
+    replace (fst B + - fst O) with (fst B - fst O) by ring.
+    replace (snd B + - snd O) with (snd B - snd O) by ring.
+    nra. }
+  assert (Hr_neq: sqrt ((fst B + - fst O) * (fst B + - fst O) +
+                        (snd B + - snd O) * (snd B + - snd O)) <> 0) by lra.
+  field. exact Hr_neq.
+Qed.
+
+(** The normalizing transform is rigid when B ≠ O *)
+Lemma normalize_is_rigid : forall O B,
+  dist O B > 0 ->
+  is_rigid (normalize_transform O B).
+Proof.
+  intros O B Hdist.
+  unfold normalize_transform.
+  set (v := (- fst O, - snd O)).
+  set (B' := translate v B).
+  set (r := sqrt (fst B' * fst B' + snd B' * snd B')).
+  set (c := fst B' / r).
+  set (s := - snd B' / r).
+  assert (Hr_pos: r > 0).
+  { unfold r, B', v, translate. simpl.
+    apply sqrt_lt_R0.
+    assert (Hdsq: dist_sq O B > 0) by (apply dist_pos_implies_dist_sq_pos; exact Hdist).
+    unfold dist_sq, px, py, Rsqr in Hdsq.
+    replace (fst B + - fst O) with (fst B - fst O) by ring.
+    replace (snd B + - snd O) with (snd B - snd O) by ring.
+    exact Hdsq. }
+  assert (Hunit: c * c + s * s = 1).
+  { unfold c, s.
+    assert (Hr_neq: r <> 0) by lra.
+    unfold r, B', v, translate. simpl.
+    set (bx := fst B + - fst O).
+    set (by_ := snd B + - snd O).
+    set (rsq := bx * bx + by_ * by_).
+    assert (Hrsq_pos: rsq > 0).
+    { unfold rsq, bx, by_.
+      assert (Hdsq: dist_sq O B > 0) by (apply dist_pos_implies_dist_sq_pos; exact Hdist).
+      unfold dist_sq, px, py, Rsqr in Hdsq. nra. }
+    assert (Hr_eq: sqrt rsq * sqrt rsq = rsq).
+    { apply sqrt_sqrt. lra. }
+    replace (bx / sqrt rsq * (bx / sqrt rsq) + - by_ / sqrt rsq * (- by_ / sqrt rsq))
+      with ((bx * bx + by_ * by_) / (sqrt rsq * sqrt rsq)).
+    2: { field. apply Rgt_not_eq. apply sqrt_lt_R0. exact Hrsq_pos. }
+    rewrite Hr_eq. unfold rsq. field.
+    unfold bx, by_. apply Rgt_not_eq.
+    assert (Hdsq: dist_sq O B > 0) by (apply dist_pos_implies_dist_sq_pos; exact Hdist).
+    unfold dist_sq, px, py, Rsqr in Hdsq. nra. }
+  apply compose_rigid.
+  - apply translate_is_rigid.
+  - apply rotate_is_rigid. exact Hunit.
+Qed.
+
 (** There exists a rigid transform taking any three collinear points to standard position *)
 Definition standard_position (O B D : Point) : Prop :=
   fst O = 0 /\ snd O = 0 /\
@@ -1730,3 +2014,535 @@ Proof.
   - exact Hs.
 Qed.
 
+(** * Section 11.7: Building Toward a Unified Theorem *)
+
+(** If O is at origin, B is on x-axis with fst B ≠ 0, collinearity of O,B,D implies D is on x-axis *)
+Lemma collinear_origin_xaxis : forall O B D,
+  fst O = 0 -> snd O = 0 ->
+  snd B = 0 -> fst B <> 0 ->
+  collinear O B D ->
+  snd D = 0.
+Proof.
+  intros O B D HO1 HO2 HB2 HBnz Hcol.
+  unfold collinear, px, py in Hcol.
+  rewrite HO1, HO2, HB2 in Hcol.
+  simpl in Hcol.
+  nra.
+Qed.
+
+(** After normalization, fst (T B) = dist O B > 0 *)
+Lemma normalize_B_x_eq_dist : forall O B,
+  dist O B > 0 ->
+  fst (normalize_transform O B B) = dist O B.
+Proof.
+  intros O B Hdist.
+  unfold normalize_transform, translate, rotate, dist, dist_sq, px, py, Rsqr. simpl.
+  replace (fst B + - fst O) with (fst B - fst O) by ring.
+  replace (snd B + - snd O) with (snd B - snd O) by ring.
+  assert (Hdsq_pos: (fst B - fst O) * (fst B - fst O) + (snd B - snd O) * (snd B - snd O) > 0).
+  { assert (H: dist_sq O B > 0) by (apply dist_pos_implies_dist_sq_pos; exact Hdist).
+    unfold dist_sq, px, py, Rsqr in H. exact H. }
+  assert (Hr_neq: sqrt ((fst B - fst O) * (fst B - fst O) + (snd B - snd O) * (snd B - snd O)) <> 0).
+  { apply Rgt_not_eq. apply sqrt_lt_R0. exact Hdsq_pos. }
+  assert (Hsqrt_sq: sqrt ((fst B - fst O) * (fst B - fst O) + (snd B - snd O) * (snd B - snd O)) *
+                    sqrt ((fst B - fst O) * (fst B - fst O) + (snd B - snd O) * (snd B - snd O)) =
+                    (fst B - fst O) * (fst B - fst O) + (snd B - snd O) * (snd B - snd O)).
+  { apply sqrt_sqrt. lra. }
+  transitivity (((fst B - fst O) * (fst B - fst O) + (snd B - snd O) * (snd B - snd O)) /
+                sqrt ((fst B - fst O) * (fst B - fst O) + (snd B - snd O) * (snd B - snd O))).
+  - field. exact Hr_neq.
+  - rewrite <- Hsqrt_sq at 1.
+    field. exact Hr_neq.
+Qed.
+
+(** After normalization, fst (T B) > 0 *)
+Lemma normalize_B_x_positive : forall O B,
+  dist O B > 0 ->
+  fst (normalize_transform O B B) > 0.
+Proof.
+  intros O B Hdist.
+  rewrite normalize_B_x_eq_dist by exact Hdist.
+  exact Hdist.
+Qed.
+
+(** Corollary: fst (T B) ≠ 0 *)
+Lemma normalize_B_x_nonzero : forall O B,
+  dist O B > 0 ->
+  fst (normalize_transform O B B) <> 0.
+Proof.
+  intros O B Hdist.
+  assert (H: fst (normalize_transform O B B) > 0) by (apply normalize_B_x_positive; exact Hdist).
+  lra.
+Qed.
+
+(** * Section 12: Strengthened Theorems - Removing AC Symmetry Assumption *)
+
+(** Product formula without assuming AC symmetry - derives it from constraints.
+    This removes the need to assume fst A = fst C and snd A = -snd C. *)
+Theorem product_formula_no_symmetry_assumption : forall O A B C D L s,
+  fst O = 0 -> snd O = 0 ->
+  snd B = 0 -> snd D = 0 ->
+  B <> D ->
+  A <> C ->
+  dist_sq O A = L * L ->
+  dist_sq O C = L * L ->
+  dist_sq A B = s * s ->
+  dist_sq B C = s * s ->
+  dist_sq C D = s * s ->
+  dist_sq D A = s * s ->
+  L > s -> s > 0 ->
+  dist_sq O B * dist_sq O D = (L * L - s * s) * (L * L - s * s).
+Proof.
+  intros O A B C D L s HO1 HO2 HB2 HD2 HBneqD HAneqC.
+  intros HOA HOC HAB HBC HCD HDA HLs Hs.
+  assert (HBDfst: fst B <> fst D).
+  { apply xaxis_neq_implies_fst_neq; assumption. }
+  assert (Hsym: fst A = fst C /\ snd A = - snd C).
+  { apply (AC_symmetry_forced O A B C D L s); assumption. }
+  destruct Hsym as [HAC1 HAC2].
+  apply (product_formula_dist_sq O A B C D L s); assumption.
+Qed.
+
+(** Minimal geometric configuration - no AC symmetry assumed *)
+Definition linkage_geometric_minimal (P : PeaucellierLinkage) : Prop :=
+  linkage_valid_sq P /\
+  OBD_collinear P /\
+  pl_A P <> pl_C P /\
+  px (pl_O P) = 0 /\ py (pl_O P) = 0 /\
+  py (pl_B P) = 0 /\ py (pl_D P) = 0 /\
+  pl_B P <> pl_D P.
+
+(** Ultra-minimal: collinearity is DERIVED, not assumed *)
+Definition linkage_geometric_derived (P : PeaucellierLinkage) : Prop :=
+  linkage_valid_sq P /\
+  pl_A P <> pl_C P /\
+  px (pl_O P) = 0 /\ py (pl_O P) = 0 /\
+  py (pl_B P) = 0 /\ py (pl_D P) = 0 /\
+  pl_B P <> pl_D P.
+
+(** The derived configuration implies the minimal one *)
+Lemma derived_implies_minimal : forall P,
+  linkage_geometric_derived P -> linkage_geometric_minimal P.
+Proof.
+  intros P [Hvalid [HAneqC [HO1 [HO2 [HB2 [HD2 HBneqD]]]]]].
+  unfold linkage_geometric_minimal.
+  split; [exact Hvalid |].
+  split; [apply linkage_OBD_collinear_record; assumption |].
+  split; [exact HAneqC |].
+  split; [exact HO1 |].
+  split; [exact HO2 |].
+  split; [exact HB2 |].
+  split; [exact HD2 |].
+  exact HBneqD.
+Qed.
+
+(** The product formula for minimal configuration *)
+Theorem peaucellier_product_formula_minimal : forall P,
+  linkage_geometric_minimal P ->
+  dist_sq (pl_O P) (pl_B P) * dist_sq (pl_O P) (pl_D P) =
+  ((pl_L P) * (pl_L P) - (pl_s P) * (pl_s P)) *
+  ((pl_L P) * (pl_L P) - (pl_s P) * (pl_s P)).
+Proof.
+  intros P [Hvalid [Hcol [HAneqC [HO1 [HO2 [HB2 [HD2 HBneqD]]]]]]].
+  destruct Hvalid as [HOA [HOC [HAB [HBC [HCD [HDA [HLs Hs]]]]]]].
+  unfold Rsqr in *.
+  apply (product_formula_no_symmetry_assumption
+           (pl_O P) (pl_A P) (pl_B P) (pl_C P) (pl_D P) (pl_L P) (pl_s P)).
+  - unfold px in HO1. exact HO1.
+  - unfold py in HO2. exact HO2.
+  - unfold py in HB2. exact HB2.
+  - unfold py in HD2. exact HD2.
+  - exact HBneqD.
+  - exact HAneqC.
+  - exact HOA.
+  - exact HOC.
+  - exact HAB.
+  - exact HBC.
+  - exact HCD.
+  - exact HDA.
+  - exact HLs.
+  - exact Hs.
+Qed.
+
+(** AC symmetry is derivable from minimal configuration *)
+Lemma minimal_implies_AC_symmetry : forall P,
+  linkage_geometric_minimal P ->
+  px (pl_A P) = px (pl_C P) /\ py (pl_A P) = - py (pl_C P).
+Proof.
+  intros P [Hvalid [Hcol [HAneqC [HO1 [HO2 [HB2 [HD2 HBneqD]]]]]]].
+  destruct Hvalid as [HOA [HOC [HAB [HBC [HCD [HDA [HLs Hs]]]]]]].
+  unfold Rsqr in *.
+  assert (HBDfst: fst (pl_B P) <> fst (pl_D P)).
+  { apply xaxis_neq_implies_fst_neq; assumption. }
+  apply (AC_symmetry_forced (pl_O P) (pl_A P) (pl_B P) (pl_C P) (pl_D P)
+                            (pl_L P) (pl_s P)).
+  - unfold px in HO1. exact HO1.
+  - unfold py in HO2. exact HO2.
+  - unfold py in HB2. exact HB2.
+  - unfold py in HD2. exact HD2.
+  - exact HBDfst.
+  - exact HOA.
+  - exact HOC.
+  - exact HAB.
+  - exact HBC.
+  - exact HCD.
+  - exact HDA.
+  - exact HLs.
+  - exact Hs.
+  - exact HAneqC.
+Qed.
+
+(** D on perpendicular line - minimal version that derives AC symmetry *)
+Lemma linkage_D_on_perp_line_minimal : forall P M r,
+  linkage_geometric_minimal P ->
+  B_on_circle_through_O P M r ->
+  dist (pl_O P) (pl_B P) > 0 ->
+  on_perp_line (pl_O P) M (linkage_k P) (pl_D P).
+Proof.
+  intros P M r Hgeom HBcirc HdistB.
+  destruct HBcirc as [HOM [Hr HBonC]].
+  destruct Hgeom as [Hvalid [Hcol [HAneqC [HO1 [HO2 [HB2 [HD2 HBneqD]]]]]]].
+  destruct Hvalid as [HOA [HOC [HAB [HBC [HCD [HDA [HLs Hs]]]]]]].
+  assert (Hsym: px (pl_A P) = px (pl_C P) /\ py (pl_A P) = - py (pl_C P)).
+  { apply minimal_implies_AC_symmetry.
+    unfold linkage_geometric_minimal, linkage_valid_sq, OBD_collinear.
+    unfold Rsqr in *.
+    repeat split; assumption. }
+  destruct Hsym as [HACx HACy].
+  assert (HBDfst: fst (pl_B P) <> fst (pl_D P)).
+  { apply xaxis_neq_implies_fst_neq; assumption. }
+  unfold on_perp_line, dot_product_from, linkage_k, linkage_k_sq, px, py.
+  unfold px, py in HO1, HO2, HD2.
+  rewrite HO1, HO2, HD2.
+  unfold Rsqr in *.
+  assert (Hprod: fst (pl_B P) * fst (pl_D P) = pl_L P * pl_L P - pl_s P * pl_s P).
+  { apply (product_formula_relaxed_order (pl_O P) (pl_A P) (pl_B P) (pl_C P) (pl_D P)
+                                         (pl_L P) (pl_s P)).
+    - unfold px in HO1. exact HO1.
+    - unfold py in HO2. exact HO2.
+    - unfold py in HB2. exact HB2.
+    - unfold py in HD2. exact HD2.
+    - exact HBDfst.
+    - unfold px in HACx. exact HACx.
+    - unfold py in HACy. exact HACy.
+    - exact HOA.
+    - exact HOC.
+    - exact HAB.
+    - exact HBC.
+    - exact HCD.
+    - exact HDA.
+    - exact HLs.
+    - exact Hs. }
+  assert (Hksq_pos: pl_L P * pl_L P - pl_s P * pl_s P > 0) by nra.
+  unfold circle_passes_through, dist in HBonC, HOM.
+  unfold dist_sq, px, py, Rsqr in HBonC, HOM.
+  rewrite HO1, HO2 in HOM.
+  unfold py in HB2. rewrite HB2 in HBonC.
+  simpl in HBonC.
+  assert (Hr_sq: (fst M - 0) * (fst M - 0) + (snd M - 0) * (snd M - 0) = r * r).
+  { apply sqrt_eq_implies_sq_eq.
+    - apply Rplus_le_le_0_compat; apply Rle_0_sqr.
+    - left. exact Hr.
+    - exact HOM. }
+  assert (HBM_sq: (fst M - fst (pl_B P)) * (fst M - fst (pl_B P)) +
+                 (snd M - 0) * (snd M - 0) = r * r).
+  { apply sqrt_eq_implies_sq_eq.
+    - apply Rplus_le_le_0_compat; apply Rle_0_sqr.
+    - left. exact Hr.
+    - exact HBonC. }
+  assert (HMx_eq: fst M - 0 = fst (pl_B P) / 2).
+  { assert (Heq: (fst M - fst (pl_B P)) * (fst M - fst (pl_B P)) =
+                 (fst M - 0) * (fst M - 0)).
+    { nra. }
+    apply Rsqr_eq in Heq. unfold Rsqr in Heq.
+    destruct Heq as [Hpos | Hneg].
+    - assert (fst (pl_B P) = 0) by lra.
+      assert (Hcontra: dist (pl_O P) (pl_B P) = 0).
+      { unfold dist, dist_sq, px, py, Rsqr. rewrite HO1, HO2, HB2, H. simpl.
+        replace ((0 - 0) * (0 - 0) + (0 - 0) * (0 - 0)) with 0 by ring.
+        apply sqrt_0. }
+      lra.
+    - lra. }
+  rewrite sqrt_sqrt by lra.
+  rewrite HMx_eq.
+  rewrite <- Hprod.
+  field; lra.
+Qed.
+
+(** ========== STRENGTHENED MAIN THEOREM ========== *)
+(**
+    Peaucellier-Lipkin Linkage Straight-Line Theorem (Minimal Assumptions):
+
+    If:
+    - The linkage satisfies the distance constraints (rhombus + equal arms)
+    - O, B, D are collinear (follows from equal arms)
+    - A ≠ C (non-degenerate rhombus)
+    - B ≠ D (non-collapsed configuration)
+    - B moves on a circle that passes through the pivot O
+    - B ≠ O (the mechanism is not at singularity)
+
+    Then:
+    - D lies on a straight line perpendicular to the line through O and
+      the circle's center
+
+    This version derives AC symmetry from the constraints rather than assuming it.
+*)
+
+Theorem peaucellier_straight_line_minimal : forall P M r,
+  linkage_geometric_minimal P ->
+  B_on_circle_through_O P M r ->
+  dist (pl_O P) (pl_B P) > 0 ->
+  on_line (pl_D P) (circle_inversion_image_line (pl_O P) M (linkage_k P)).
+Proof.
+  intros P M r Hgeom HBcirc HdistB.
+  apply circle_inversion_image_line_char.
+  apply linkage_D_on_perp_line_minimal with (r := r); assumption.
+Qed.
+
+(** ========== ULTIMATE THEOREM: COLLINEARITY DERIVED ========== *)
+(**
+    This is the strongest form of the theorem. Collinearity of O, B, D
+    is NOT assumed - it is derived from the linkage constraints via
+    linkage_OBD_collinear_record.
+*)
+
+Theorem peaucellier_straight_line_derived : forall P M r,
+  linkage_geometric_derived P ->
+  B_on_circle_through_O P M r ->
+  dist (pl_O P) (pl_B P) > 0 ->
+  on_line (pl_D P) (circle_inversion_image_line (pl_O P) M (linkage_k P)).
+Proof.
+  intros P M r Hderived HBcirc HdistB.
+  apply peaucellier_straight_line_minimal with (r := r); try assumption.
+  apply derived_implies_minimal. exact Hderived.
+Qed.
+
+(** * Section 13: Constructive Line Witness *)
+
+(** Compute the straight line traced by D given linkage parameters and circle center.
+    The line is perpendicular to (M - O) and passes through the point where
+    the dot product with (M - O) equals k²/2.
+
+    Line equation: (Mx - Ox)(x - Ox) + (My - Oy)(y - Oy) = k²/2
+    In standard form Ax + By + C = 0:
+      A = Mx - Ox
+      B = My - Oy
+      C = -A·Ox - B·Oy - k²/2
+*)
+
+Definition peaucellier_output_line (O M : Point) (L s : R) : Line :=
+  let k_sq := L * L - s * s in
+  circle_inversion_image_line O M (sqrt k_sq).
+
+(** The line coefficients as explicit functions *)
+Definition output_line_A (O M : Point) : R := px M - px O.
+Definition output_line_B (O M : Point) : R := py M - py O.
+Definition output_line_C (O M : Point) (L s : R) : R :=
+  let k_sq := L * L - s * s in
+  - (px M - px O) * px O - (py M - py O) * py O - k_sq / 2.
+
+(** The explicit line matches our definition *)
+Lemma peaucellier_output_line_explicit : forall O M L s,
+  L > s -> s > 0 ->
+  peaucellier_output_line O M L s =
+  mkLine (output_line_A O M) (output_line_B O M) (output_line_C O M L s).
+Proof.
+  intros O M L s HLs Hs.
+  unfold peaucellier_output_line, circle_inversion_image_line.
+  unfold output_line_A, output_line_B, output_line_C.
+  f_equal.
+  assert (Hksq_pos: L * L - s * s > 0) by nra.
+  rewrite sqrt_sqrt by lra.
+  reflexivity.
+Qed.
+
+(** Final theorem with explicit line construction *)
+Theorem peaucellier_explicit_line : forall P M r,
+  linkage_geometric_minimal P ->
+  B_on_circle_through_O P M r ->
+  dist (pl_O P) (pl_B P) > 0 ->
+  on_line (pl_D P) (peaucellier_output_line (pl_O P) M (pl_L P) (pl_s P)).
+Proof.
+  intros P M r Hgeom HBcirc HdistB.
+  unfold peaucellier_output_line.
+  assert (Hk_eq: sqrt (pl_L P * pl_L P - pl_s P * pl_s P) = linkage_k P).
+  { unfold linkage_k, linkage_k_sq. reflexivity. }
+  rewrite Hk_eq.
+  apply peaucellier_straight_line_minimal with (r := r); assumption.
+Qed.
+
+(** Extraction-friendly version: compute line coefficients directly *)
+Definition compute_line_coefficients (Ox Oy Mx My L s : R) : R * R * R :=
+  let A := Mx - Ox in
+  let B := My - Oy in
+  let k_sq := L * L - s * s in
+  let C := - A * Ox - B * Oy - k_sq / 2 in
+  (A, B, C).
+
+(** The computed coefficients match our line definition *)
+Lemma compute_line_coefficients_correct : forall O M L s,
+  L > s -> s > 0 ->
+  let (AB, C) := compute_line_coefficients (px O) (py O) (px M) (py M) L s in
+  let (A, B) := AB in
+  peaucellier_output_line O M L s = mkLine A B C.
+Proof.
+  intros O M L s HLs Hs.
+  unfold compute_line_coefficients.
+  rewrite peaucellier_output_line_explicit by assumption.
+  unfold output_line_A, output_line_B, output_line_C.
+  reflexivity.
+Qed.
+
+(** * Section 14: General Position Theorem *)
+
+(** The key insight: the perpendicular line condition dot_product_from O M D = k²/2
+    is coordinate-invariant. We prove this by showing rigid transforms preserve
+    dot products (up to the transform of the reference point). *)
+
+(** Rigid transforms preserve dot products from a common origin *)
+Lemma rigid_preserves_dot_product : forall T O P Q,
+  is_rigid T ->
+  dot_product_from (T O) (T P) (T Q) = dot_product_from O P Q.
+Proof.
+  intros T O P Q HT.
+  unfold dot_product_from.
+  assert (Hdist_OP: dist_sq (T O) (T P) = dist_sq O P) by apply HT.
+  assert (Hdist_OQ: dist_sq (T O) (T Q) = dist_sq O Q) by apply HT.
+  assert (Hdist_PQ: dist_sq (T P) (T Q) = dist_sq P Q) by apply HT.
+  unfold dist_sq, px, py, Rsqr in *.
+  set (ox := fst O). set (oy := snd O).
+  set (px_ := fst P). set (py_ := snd P).
+  set (qx := fst Q). set (qy := snd Q).
+  set (tox := fst (T O)). set (toy := snd (T O)).
+  set (tpx := fst (T P)). set (tpy := snd (T P)).
+  set (tqx := fst (T Q)). set (tqy := snd (T Q)).
+  assert (H1: (tpx - tox) * (tpx - tox) + (tpy - toy) * (tpy - toy) =
+              (px_ - ox) * (px_ - ox) + (py_ - oy) * (py_ - oy)) by exact Hdist_OP.
+  assert (H2: (tqx - tox) * (tqx - tox) + (tqy - toy) * (tqy - toy) =
+              (qx - ox) * (qx - ox) + (qy - oy) * (qy - oy)) by exact Hdist_OQ.
+  assert (H3: (tqx - tpx) * (tqx - tpx) + (tqy - tpy) * (tqy - tpy) =
+              (qx - px_) * (qx - px_) + (qy - py_) * (qy - py_)) by exact Hdist_PQ.
+  nra.
+Qed.
+
+(** General validity: only distance constraints, no coordinate assumptions *)
+Definition linkage_valid_general_full (O A B C D : Point) (L s : R) : Prop :=
+  dist_sq O A = L * L /\
+  dist_sq O C = L * L /\
+  dist_sq A B = s * s /\
+  dist_sq B C = s * s /\
+  dist_sq C D = s * s /\
+  dist_sq D A = s * s /\
+  L > s /\ s > 0 /\
+  A <> C /\ B <> D /\
+  dist O B > 0.
+
+(** The perpendicular line condition in general position *)
+Definition D_on_perp_line_general (O M D : Point) (k : R) : Prop :=
+  dot_product_from O M D = k * k / 2.
+
+(** Key theorem: The perpendicular line condition is preserved under rigid transforms *)
+Lemma perp_line_rigid_invariant : forall T O M D k,
+  is_rigid T ->
+  D_on_perp_line_general O M D k <->
+  D_on_perp_line_general (T O) (T M) (T D) k.
+Proof.
+  intros T O M D k HT.
+  unfold D_on_perp_line_general.
+  rewrite (rigid_preserves_dot_product T O M D HT).
+  tauto.
+Qed.
+
+(** Rigid transforms reflect point inequality: T P = T Q implies P = Q *)
+Lemma rigid_reflects_eq : forall T P Q,
+  is_rigid T -> T P = T Q -> P = Q.
+Proof.
+  intros T P Q HT Heq.
+  assert (Hdist: dist_sq (T P) (T Q) = dist_sq P Q) by apply HT.
+  rewrite Heq in Hdist. rewrite dist_sq_refl in Hdist.
+  symmetry in Hdist. apply dist_sq_zero_iff in Hdist.
+  unfold point_eq in Hdist. destruct P, Q. simpl in *.
+  f_equal; [exact (proj1 Hdist) | exact (proj2 Hdist)].
+Qed.
+
+(** Contrapositive: P ≠ Q implies T P ≠ T Q *)
+Lemma rigid_preserves_neq : forall T P Q,
+  is_rigid T -> P <> Q -> T P <> T Q.
+Proof.
+  intros T P Q HT Hneq Heq.
+  apply Hneq. apply (rigid_reflects_eq T); assumption.
+Qed.
+
+(** Rigid transforms preserve dist *)
+Lemma rigid_preserves_dist : forall T P Q,
+  is_rigid T -> dist (T P) (T Q) = dist P Q.
+Proof.
+  intros T P Q HT.
+  unfold dist. rewrite (rigid_preserves_dist_sq T P Q HT). reflexivity.
+Qed.
+
+(** * Section 15: Degenerate Case Analysis *)
+
+(** L > s implies |OA| > |AB|, so A cannot coincide with B *)
+Lemma L_gt_s_implies_A_neq_B : forall O A B L s,
+  dist O A = L -> dist A B = s -> L > s -> s > 0 -> A <> B.
+Proof.
+  intros O A B L s HOA HAB HLs Hs Heq.
+  rewrite Heq in HAB. rewrite dist_refl in HAB.
+  lra.
+Qed.
+
+(** Non-zero arm length implies O ≠ A *)
+Lemma L_pos_implies_O_neq_A : forall O A L,
+  dist O A = L -> L > 0 -> O <> A.
+Proof.
+  intros O A L HOA HL Heq.
+  rewrite Heq in HOA. rewrite dist_refl in HOA.
+  lra.
+Qed.
+
+(** dist > 0 iff points are distinct *)
+Lemma dist_pos_iff_neq : forall P Q,
+  dist P Q > 0 <-> P <> Q.
+Proof.
+  intros P Q. split.
+  - intros Hpos Heq. rewrite Heq in Hpos. rewrite dist_refl in Hpos. lra.
+  - intros Hneq.
+    assert (Hge: dist P Q >= 0) by (apply Rle_ge; apply dist_nonneg).
+    destruct (Rle_lt_or_eq_dec 0 (dist P Q)) as [Hlt | Heq].
+    + apply Rge_le. exact Hge.
+    + exact Hlt.
+    + exfalso. apply Hneq.
+      assert (Hpeq: point_eq P Q) by (apply dist_zero_iff; lra).
+      unfold point_eq in Hpeq. destruct P, Q. simpl in *.
+      f_equal; [exact (proj1 Hpeq) | exact (proj2 Hpeq)].
+Qed.
+
+(** Linkage validity implies key non-degeneracy conditions *)
+Lemma linkage_nondegen_basic : forall O A L s,
+  dist O A = L -> L > s -> s > 0 -> O <> A.
+Proof.
+  intros O A L s HOA HLs Hs.
+  apply L_pos_implies_O_neq_A with L; [exact HOA | lra].
+Qed.
+
+(** Rhombus side length s > 0 implies adjacent vertices distinct *)
+Lemma rhombus_adjacent_neq : forall A B s,
+  dist A B = s -> s > 0 -> A <> B.
+Proof.
+  intros A B s HAB Hs Heq.
+  rewrite Heq in HAB. rewrite dist_refl in HAB. lra.
+Qed.
+
+(** * Section 16: General Position - Unified Theorem *)
+
+(** This section builds the coordinate-free formulation incrementally. *)
+
+(** Circle through O in general position *)
+Definition B_on_circle_through_O_general (O B M : Point) (r : R) : Prop :=
+  dist O M = r /\
+  r > 0 /\
+  dist B M = r.
+
+(** The inversion radius from arm and side lengths *)
+Definition inversion_radius (L s : R) : R := sqrt (L * L - s * s).

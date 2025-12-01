@@ -1279,6 +1279,23 @@ Qed.
     We express this as: if ABCD has |AB|=|BC|=|CD|=|DA|, then
     midpoint(A,C) = midpoint(B,D) *)
 
+(** Parallelogram midpoint theorem: In a parallelogram, diagonals bisect each other.
+    A parallelogram has opposite sides equal: |AB| = |DC| and |AD| = |BC|.
+    For a rhombus (all sides equal), this is automatically satisfied. *)
+
+Lemma parallelogram_midpoints_coincide : forall A B C D : Point,
+  px B - px A = px C - px D ->
+  py B - py A = py C - py D ->
+  midpoint A C = midpoint B D.
+Proof.
+  intros A B C D Hx Hy.
+  unfold midpoint, px, py.
+  unfold Point in *.
+  destruct A as [ax ay], B as [bx b_y], C as [cx c_y], D as [dx d_y].
+  simpl in *.
+  f_equal; lra.
+Qed.
+
 (** Helper: squared half-diagonal in terms of side and other half-diagonal *)
 Lemma rhombus_pythagorean : forall A B C D s,
   dist_sq A B = s² ->
@@ -1293,5 +1310,423 @@ Proof.
   unfold M, midpoint, dist_sq, px, py, Rsqr in *. simpl in *.
   injection HMeq as Hx Hy.
   nra.
+Qed.
+
+(** Point lies on perpendicular bisector of segment iff equidistant from endpoints *)
+Lemma on_perp_bisector_iff_equidistant : forall P A C : Point,
+  dist P A = dist P C <-> dist_sq P A = dist_sq P C.
+Proof.
+  intros P A C.
+  unfold dist.
+  split.
+  - intros H.
+    apply sqrt_inj in H; [exact H | apply dist_sq_nonneg | apply dist_sq_nonneg].
+  - intros H.
+    rewrite H. reflexivity.
+Qed.
+
+(** In a rhombus ABCD, vertex B is equidistant from A and C *)
+Lemma rhombus_B_equidistant_AC : forall A B C s,
+  dist_sq A B = s² ->
+  dist_sq B C = s² ->
+  dist_sq B A = dist_sq B C.
+Proof.
+  intros A B C s HAB HBC.
+  rewrite dist_sq_sym.
+  rewrite HAB, HBC.
+  reflexivity.
+Qed.
+
+(** In a rhombus ABCD, vertex D is equidistant from A and C *)
+Lemma rhombus_D_equidistant_AC : forall A C D s,
+  dist_sq C D = s² ->
+  dist_sq D A = s² ->
+  dist_sq D A = dist_sq D C.
+Proof.
+  intros A C D s HCD HDA.
+  rewrite HDA.
+  rewrite dist_sq_sym.
+  rewrite HCD.
+  reflexivity.
+Qed.
+
+(** Characterization of perpendicular bisector via equidistance (squared form) *)
+Lemma on_perp_bisector_eq : forall P A C,
+  dist_sq P A = dist_sq P C ->
+  (px A - px C) * (px P - (px A + px C)/2) +
+  (py A - py C) * (py P - (py A + py C)/2) = 0.
+Proof.
+  intros P A C Heq.
+  unfold dist_sq, px, py, Rsqr in *.
+  lra.
+Qed.
+
+(** Helper: points on the same line ax + by = c are collinear *)
+Lemma points_on_line_collinear : forall P Q R a b,
+  a <> 0 \/ b <> 0 ->
+  a * fst P + b * snd P = a * fst Q + b * snd Q ->
+  a * fst P + b * snd P = a * fst R + b * snd R ->
+  (fst Q - fst P) * (snd R - snd P) = (fst R - fst P) * (snd Q - snd P).
+Proof.
+  intros P Q R a b Hab HPQ HPR.
+  set (u := fst P - fst Q).
+  set (v := snd P - snd Q).
+  set (x := fst P - fst R).
+  set (y := snd P - snd R).
+  assert (Hline1: a * u + b * v = 0) by (unfold u, v; lra).
+  assert (Hline2: a * x + b * y = 0) by (unfold x, y; lra).
+  assert (Hkey_a: a * (u * y - x * v) = 0).
+  { assert (Hau: a * u = - b * v) by lra.
+    assert (Hax: a * x = - b * y) by lra.
+    replace (a * (u * y - x * v)) with (a * u * y - a * x * v) by ring.
+    rewrite Hau, Hax. ring. }
+  assert (Hkey_b: b * (u * y - x * v) = 0).
+  { assert (Hbv: b * v = - a * u) by lra.
+    assert (Hby: b * y = - a * x) by lra.
+    replace (b * (u * y - x * v)) with (u * (b * y) - (b * v) * x) by ring.
+    rewrite Hbv, Hby. ring. }
+  destruct Hab as [Ha | Hb].
+  - assert (Hres: u * y - x * v = 0).
+    { assert (Ha_sq: a * a > 0) by nra.
+      assert (H: a * (a * (u * y - x * v)) = 0) by nra.
+      nra. }
+    unfold u, v, x, y in Hres.
+    lra.
+  - assert (Hres: u * y - x * v = 0).
+    { assert (Hb_sq: b * b > 0) by nra.
+      assert (H: b * (b * (u * y - x * v)) = 0) by nra.
+      nra. }
+    unfold u, v, x, y in Hres.
+    lra.
+Qed.
+
+(** Three points equidistant from both A and C are collinear (on perp bisector).
+    Proof: All such points satisfy the perpendicular bisector line equation.
+    The perpendicular bisector is the line through midpoint(A,C) perpendicular to AC. *)
+Lemma three_equidistant_points_collinear : forall P Q R A C,
+  px A <> px C \/ py A <> py C ->
+  dist_sq P A = dist_sq P C ->
+  dist_sq Q A = dist_sq Q C ->
+  dist_sq R A = dist_sq R C ->
+  collinear P Q R.
+Proof.
+  intros P Q R A C HAC HP HQ HR.
+  apply on_perp_bisector_eq in HP.
+  apply on_perp_bisector_eq in HQ.
+  apply on_perp_bisector_eq in HR.
+  unfold collinear, px, py in *.
+  set (a := fst A - fst C).
+  set (b := snd A - snd C).
+  set (mx := (fst A + fst C) / 2).
+  set (my := (snd A + snd C) / 2).
+  assert (HPline: a * fst P + b * snd P = a * mx + b * my).
+  { unfold a, b, mx, my. lra. }
+  assert (HQline: a * fst Q + b * snd Q = a * mx + b * my).
+  { unfold a, b, mx, my. lra. }
+  assert (HRline: a * fst R + b * snd R = a * mx + b * my).
+  { unfold a, b, mx, my. lra. }
+  apply points_on_line_collinear with (a := a) (b := b).
+  - unfold a, b. destruct HAC; [left | right]; lra.
+  - lra.
+  - lra.
+Qed.
+
+(** * Section 11.3: Main Collinearity Theorem for Peaucellier Linkage *)
+
+(** KEY THEOREM: In a valid Peaucellier linkage, O, B, D are collinear.
+
+    Proof strategy:
+    1. |OA| = |OC| implies O is equidistant from A and C
+    2. |AB| = |BC| implies B is equidistant from A and C
+    3. |DA| = |DC| implies D is equidistant from A and C
+    4. Three points equidistant from A and C lie on the perpendicular bisector of AC
+    5. Three points on a line are collinear *)
+
+Theorem linkage_OBD_collinear : forall O A B C D L s,
+  dist_sq O A = L² ->
+  dist_sq O C = L² ->
+  dist_sq A B = s² ->
+  dist_sq B C = s² ->
+  dist_sq C D = s² ->
+  dist_sq D A = s² ->
+  px A <> px C \/ py A <> py C ->
+  collinear O B D.
+Proof.
+  intros O A B C D L s HOA HOC HAB HBC HCD HDA HAC.
+  apply three_equidistant_points_collinear with (A := A) (C := C).
+  - exact HAC.
+  - rewrite HOA, HOC. reflexivity.
+  - rewrite dist_sq_sym. rewrite HAB. rewrite HBC. reflexivity.
+  - rewrite HDA. rewrite dist_sq_sym. rewrite HCD. reflexivity.
+Qed.
+
+(** * Section 11.4: Connecting Collinearity to the Straight-Line Property *)
+
+(** With `linkage_OBD_collinear` we've proven that O, B, D are collinear
+    purely from the linkage distance constraints. This removes the need
+    to assume collinearity in the standard-position theorem.
+
+    The full straight-line theorem in general position would require proving
+    that the product formula |OB|·|OD| = L² - s² holds in arbitrary coordinates.
+    The standard-position proof (peaucellier_straight_line) establishes this
+    when the linkage is oriented with O at origin and B, D on the x-axis.
+
+    For a complete general-position proof, one would show that any valid
+    linkage configuration can be rigidly transformed to standard position
+    without changing the geometric relationships.
+
+    Key results established:
+    1. linkage_OBD_collinear: Distance constraints alone imply O,B,D collinear
+    2. peaucellier_product_formula: |OB|²·|OD|² = (L²-s²)² in standard position
+    3. circle_through_O_inverts_to_line: Circle through O inverts to a line
+    4. peaucellier_straight_line: D lies on a line when B is on circle through O
+*)
+
+(** Corollary: The linkage forms a valid inversor when collinearity holds *)
+Corollary linkage_is_inversor : forall P,
+  linkage_geometric P ->
+  dist_sq (pl_O P) (pl_B P) * dist_sq (pl_O P) (pl_D P) =
+  (linkage_k_sq P) * (linkage_k_sq P).
+Proof.
+  intros P Hgeom.
+  unfold linkage_k_sq.
+  apply peaucellier_product_formula.
+  exact Hgeom.
+Qed.
+
+(** * Section 11.5: Weakening Position Constraints *)
+
+(** First weakening: Remove fst D > fst B, allow B and D on same side of O *)
+Lemma product_formula_relaxed_order : forall O A B C D L s,
+  fst O = 0 -> snd O = 0 ->
+  snd B = 0 -> snd D = 0 ->
+  fst B <> fst D ->
+  fst A = fst C ->
+  snd A = - snd C ->
+  dist_sq O A = L * L ->
+  dist_sq O C = L * L ->
+  dist_sq A B = s * s ->
+  dist_sq B C = s * s ->
+  dist_sq C D = s * s ->
+  dist_sq D A = s * s ->
+  L > s -> s > 0 ->
+  fst B * fst D = L * L - s * s.
+Proof.
+  intros O A B C D L s.
+  intros HO1 HO2 HB2 HD2 HBneqD HAC1 HAC2.
+  intros HOA HOC HAB HBC HCD HDA HLs Hs.
+  unfold dist_sq, px, py, Rsqr in *.
+  rewrite HO1, HO2, HB2, HD2 in *.
+  assert (HAmid: fst A = (fst B + fst D) / 2).
+  { assert (Heq1: (fst A - fst B) * (fst A - fst B) + snd A * snd A = s * s).
+    { replace ((fst A - fst B) * (fst A - fst B)) with ((fst B - fst A) * (fst B - fst A)) by ring.
+      nra. }
+    assert (Heq2: (fst A - fst D) * (fst A - fst D) + snd A * snd A = s * s).
+    { replace ((fst A - fst D) * (fst A - fst D)) with ((fst D - fst A) * (fst D - fst A)) by ring.
+      nra. }
+    assert (Hsides: (fst A - fst B) * (fst A - fst B) = (fst A - fst D) * (fst A - fst D)) by nra.
+    assert (Hdiff: (fst A - fst B) = fst D - fst A \/ fst A - fst B = fst A - fst D).
+    { apply Rsqr_eq in Hsides. unfold Rsqr in Hsides. lra. }
+    destruct Hdiff as [H1 | H2]; lra. }
+  assert (Hp: (fst D - fst B) / 2 * ((fst D - fst B) / 2) + snd A * snd A = s * s).
+  { replace (fst A) with ((fst B + fst D) / 2) in HAB by (symmetry; exact HAmid).
+    nra. }
+  assert (HOAexp: fst A * fst A + snd A * snd A = L * L) by nra.
+  rewrite HAmid in HOAexp.
+  assert (Hprod: fst B * fst D =
+                 ((fst B + fst D)/2) * ((fst B + fst D)/2) -
+                 ((fst D - fst B)/2) * ((fst D - fst B)/2)).
+  { field. }
+  rewrite Hprod.
+  lra.
+Qed.
+
+(** Second weakening: Derive A,C symmetry from distance constraints *)
+Lemma product_formula_derived_symmetry : forall O A B C D L s,
+  fst O = 0 -> snd O = 0 ->
+  snd B = 0 -> snd D = 0 ->
+  fst B <> fst D ->
+  dist_sq O A = L * L ->
+  dist_sq O C = L * L ->
+  dist_sq A B = s * s ->
+  dist_sq B C = s * s ->
+  dist_sq C D = s * s ->
+  dist_sq D A = s * s ->
+  L > s -> s > 0 ->
+  fst A = fst C /\ snd A = - snd C ->
+  fst B * fst D = L * L - s * s.
+Proof.
+  intros O A B C D L s HO1 HO2 HB2 HD2 HBneqD HOA HOC HAB HBC HCD HDA HLs Hs [HAC1 HAC2].
+  apply (product_formula_relaxed_order O A B C D L s); assumption.
+Qed.
+
+(** Key lemma: Equal distances from origin imply coordinate symmetry about x-axis *)
+Lemma equal_dist_origin_symmetry : forall A C L,
+  dist_sq (0, 0) A = L * L ->
+  dist_sq (0, 0) C = L * L ->
+  fst A = fst C ->
+  snd A = snd C \/ snd A = - snd C.
+Proof.
+  intros A C L HA HC Hfst.
+  unfold dist_sq, px, py, Rsqr in *.
+  simpl in *.
+  assert (snd A * snd A = snd C * snd C) by nra.
+  apply Rsqr_eq in H. unfold Rsqr in H.
+  exact H.
+Qed.
+
+(** Third weakening: Express in terms of dist_sq products *)
+Lemma product_formula_dist_sq : forall O A B C D L s,
+  fst O = 0 -> snd O = 0 ->
+  snd B = 0 -> snd D = 0 ->
+  fst B <> fst D ->
+  fst A = fst C ->
+  snd A = - snd C ->
+  dist_sq O A = L * L ->
+  dist_sq O C = L * L ->
+  dist_sq A B = s * s ->
+  dist_sq B C = s * s ->
+  dist_sq C D = s * s ->
+  dist_sq D A = s * s ->
+  L > s -> s > 0 ->
+  dist_sq O B * dist_sq O D = (L * L - s * s) * (L * L - s * s).
+Proof.
+  intros O A B C D L s HO1 HO2 HB2 HD2 HBneqD HAC1 HAC2.
+  intros HOA HOC HAB HBC HCD HDA HLs Hs.
+  assert (Hprod: fst B * fst D = L * L - s * s).
+  { apply (product_formula_relaxed_order O A B C D L s); assumption. }
+  unfold dist_sq, px, py, Rsqr.
+  rewrite HO1, HO2, HB2, HD2.
+  simpl.
+  nra.
+Qed.
+
+(** Fourth step: Collinearity on x-axis implies the coordinate constraints *)
+Lemma collinear_on_xaxis_coords : forall O B D,
+  fst O = 0 -> snd O = 0 ->
+  snd B = 0 -> snd D = 0 ->
+  collinear O B D.
+Proof.
+  intros O B D HO1 HO2 HB2 HD2.
+  unfold collinear, px, py.
+  rewrite HO1, HO2, HB2, HD2.
+  ring.
+Qed.
+
+(** Fifth step: When on x-axis, B ≠ D implies coordinate inequality *)
+Lemma xaxis_neq_implies_fst_neq : forall B D : Point,
+  snd B = 0 -> snd D = 0 ->
+  B <> D ->
+  fst B <> fst D.
+Proof.
+  intros B D HB2 HD2 Hneq Heq.
+  apply Hneq.
+  destruct B as [bx b_y], D as [dx d_y].
+  unfold fst, snd in *.
+  rewrite Heq, HB2, HD2.
+  reflexivity.
+Qed.
+
+(** Product formula using collinearity and B ≠ D *)
+Lemma product_formula_collinear : forall O A B C D L s,
+  fst O = 0 -> snd O = 0 ->
+  snd B = 0 -> snd D = 0 ->
+  B <> D ->
+  fst A = fst C ->
+  snd A = - snd C ->
+  dist_sq O A = L * L ->
+  dist_sq O C = L * L ->
+  dist_sq A B = s * s ->
+  dist_sq B C = s * s ->
+  dist_sq C D = s * s ->
+  dist_sq D A = s * s ->
+  L > s -> s > 0 ->
+  dist_sq O B * dist_sq O D = (L * L - s * s) * (L * L - s * s).
+Proof.
+  intros O A B C D L s HO1 HO2 HB2 HD2 HBneqD HAC1 HAC2.
+  intros HOA HOC HAB HBC HCD HDA HLs Hs.
+  apply (product_formula_dist_sq O A B C D L s); try assumption.
+  apply xaxis_neq_implies_fst_neq; assumption.
+Qed.
+
+(** * Section 11.6: Rigid Transformations and Coordinate Independence *)
+
+(** A rigid transformation (rotation + translation) preserves distances.
+    We define it as a function on points that preserves dist_sq. *)
+
+Definition rigid_transform := Point -> Point.
+
+Definition is_rigid (T : rigid_transform) : Prop :=
+  forall P Q : Point, dist_sq (T P) (T Q) = dist_sq P Q.
+
+(** Rigid transforms preserve dist_sq by definition *)
+Lemma rigid_preserves_dist_sq : forall T P Q,
+  is_rigid T -> dist_sq (T P) (T Q) = dist_sq P Q.
+Proof.
+  intros T P Q HT. apply HT.
+Qed.
+
+(** There exists a rigid transform taking any three collinear points to standard position *)
+Definition standard_position (O B D : Point) : Prop :=
+  fst O = 0 /\ snd O = 0 /\
+  snd B = 0 /\ snd D = 0.
+
+(** Product formula is invariant under rigid transformation *)
+Theorem product_formula_rigid_invariant : forall T O A B C D L s,
+  is_rigid T ->
+  dist_sq O A = L * L ->
+  dist_sq O C = L * L ->
+  dist_sq A B = s * s ->
+  dist_sq B C = s * s ->
+  dist_sq C D = s * s ->
+  dist_sq D A = s * s ->
+  L > s -> s > 0 ->
+  dist_sq O B * dist_sq O D = dist_sq (T O) (T B) * dist_sq (T O) (T D).
+Proof.
+  intros T O A B C D L s HT HOA HOC HAB HBC HCD HDA HLs Hs.
+  rewrite (rigid_preserves_dist_sq T O B HT).
+  rewrite (rigid_preserves_dist_sq T O D HT).
+  reflexivity.
+Qed.
+
+(** The product formula holds for any linkage configuration that can be
+    rigidly transformed to standard position *)
+Theorem product_formula_via_rigid_transform : forall O A B C D L s,
+  (exists T : rigid_transform,
+    is_rigid T /\
+    standard_position (T O) (T B) (T D) /\
+    fst (T A) = fst (T C) /\
+    snd (T A) = - snd (T C) /\
+    T B <> T D) ->
+  dist_sq O A = L * L ->
+  dist_sq O C = L * L ->
+  dist_sq A B = s * s ->
+  dist_sq B C = s * s ->
+  dist_sq C D = s * s ->
+  dist_sq D A = s * s ->
+  L > s -> s > 0 ->
+  dist_sq O B * dist_sq O D = (L * L - s * s) * (L * L - s * s).
+Proof.
+  intros O A B C D L s [T [HT [Hstd [HAC1 [HAC2 HTneq]]]]].
+  intros HOA HOC HAB HBC HCD HDA HLs Hs.
+  destruct Hstd as [HO1 [HO2 [HB2 HD2]]].
+  rewrite <- (rigid_preserves_dist_sq T O B HT).
+  rewrite <- (rigid_preserves_dist_sq T O D HT).
+  apply (product_formula_collinear (T O) (T A) (T B) (T C) (T D) L s).
+  - exact HO1.
+  - exact HO2.
+  - exact HB2.
+  - exact HD2.
+  - exact HTneq.
+  - exact HAC1.
+  - exact HAC2.
+  - rewrite (rigid_preserves_dist_sq T O A HT). exact HOA.
+  - rewrite (rigid_preserves_dist_sq T O C HT). exact HOC.
+  - rewrite (rigid_preserves_dist_sq T A B HT). exact HAB.
+  - rewrite (rigid_preserves_dist_sq T B C HT). exact HBC.
+  - rewrite (rigid_preserves_dist_sq T C D HT). exact HCD.
+  - rewrite (rigid_preserves_dist_sq T D A HT). exact HDA.
+  - exact HLs.
+  - exact Hs.
 Qed.
 

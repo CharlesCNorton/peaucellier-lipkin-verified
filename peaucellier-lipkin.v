@@ -2546,3 +2546,307 @@ Definition B_on_circle_through_O_general (O B M : Point) (r : R) : Prop :=
 
 (** The inversion radius from arm and side lengths *)
 Definition inversion_radius (L s : R) : R := sqrt (L * L - s * s).
+
+(** Cross product squared equals product of norms squared minus dot squared *)
+Lemma cross_sq_identity : forall a b c d,
+  (a * d - b * c) * (a * d - b * c) =
+  (a * a + b * b) * (c * c + d * d) - (a * c + b * d) * (a * c + b * d).
+Proof. intros. ring. Qed.
+
+(** Collinearity restated: cross product is zero *)
+Lemma collinear_cross_zero : forall P Q R,
+  collinear P Q R <->
+  (fst Q - fst P) * (snd R - snd P) - (snd Q - snd P) * (fst R - fst P) = 0.
+Proof.
+  intros P Q R. unfold collinear, px, py. lra.
+Qed.
+
+(** Rigid transforms preserve cross product squared *)
+Lemma rigid_preserves_cross_sq : forall T P Q R,
+  is_rigid T ->
+  let a := fst Q - fst P in let b := snd Q - snd P in
+  let c := fst R - fst P in let d := snd R - snd P in
+  let a' := fst (T Q) - fst (T P) in let b' := snd (T Q) - snd (T P) in
+  let c' := fst (T R) - fst (T P) in let d' := snd (T R) - snd (T P) in
+  (a' * d' - b' * c') * (a' * d' - b' * c') = (a * d - b * c) * (a * d - b * c).
+Proof.
+  intros T P Q R HT a b c d a' b' c' d'.
+  assert (Hdist_PQ: dist_sq (T P) (T Q) = dist_sq P Q) by apply HT.
+  assert (Hdist_PR: dist_sq (T P) (T R) = dist_sq P R) by apply HT.
+  assert (Hdist_QR: dist_sq (T Q) (T R) = dist_sq Q R) by apply HT.
+  unfold dist_sq, px, py, Rsqr in *.
+  assert (Ha2b2: a' * a' + b' * b' = a * a + b * b) by (unfold a', b', a, b; nra).
+  assert (Hc2d2: c' * c' + d' * d' = c * c + d * d) by (unfold c', d', c, d; nra).
+  assert (Hdot: a' * c' + b' * d' = a * c + b * d).
+  { unfold a', b', c', d', a, b, c, d.
+    assert (Hexp: (fst (T Q) - fst (T R)) * (fst (T Q) - fst (T R)) +
+                  (snd (T Q) - snd (T R)) * (snd (T Q) - snd (T R)) =
+                  (fst Q - fst R) * (fst Q - fst R) +
+                  (snd Q - snd R) * (snd Q - snd R)) by nra.
+    nra. }
+  rewrite cross_sq_identity. rewrite cross_sq_identity.
+  rewrite Ha2b2, Hc2d2, Hdot. reflexivity.
+Qed.
+
+(** Rigid transforms preserve collinearity *)
+Lemma rigid_preserves_collinear : forall T P Q R,
+  is_rigid T ->
+  collinear P Q R <-> collinear (T P) (T Q) (T R).
+Proof.
+  intros T P Q R HT.
+  rewrite collinear_cross_zero. rewrite collinear_cross_zero.
+  pose proof (rigid_preserves_cross_sq T P Q R HT) as Hsq.
+  simpl in Hsq.
+  split; intros H.
+  - assert (Hzero: (fst Q - fst P) * (snd R - snd P) - (snd Q - snd P) * (fst R - fst P) = 0) by lra.
+    assert (Hsq_zero: 0 * 0 = 0) by ring.
+    rewrite <- Hzero in Hsq_zero. rewrite <- Hsq in Hsq_zero. nra.
+  - assert (Hzero: (fst (T Q) - fst (T P)) * (snd (T R) - snd (T P)) -
+                   (snd (T Q) - snd (T P)) * (fst (T R) - fst (T P)) = 0) by lra.
+    assert (Hsq_zero: 0 * 0 = 0) by ring.
+    rewrite <- Hzero in Hsq_zero. rewrite Hsq in Hsq_zero. nra.
+Qed.
+
+(** If O,B,D are collinear, normalizing puts D on x-axis *)
+Lemma normalize_D_on_xaxis : forall O B D,
+  dist O B > 0 ->
+  collinear O B D ->
+  snd (normalize_transform O B D) = 0.
+Proof.
+  intros O B D Hdist Hcol.
+  set (T := normalize_transform O B).
+  assert (HTO: T O = (0, 0)) by apply normalize_O_at_origin.
+  assert (HTB: snd (T B) = 0) by (apply normalize_B_on_xaxis; exact Hdist).
+  assert (HTBx: fst (T B) <> 0) by (apply normalize_B_x_nonzero; exact Hdist).
+  assert (Hrigid: is_rigid T) by (apply normalize_is_rigid; exact Hdist).
+  assert (Hcol': collinear (T O) (T B) (T D)).
+  { apply rigid_preserves_collinear; assumption. }
+  apply collinear_origin_xaxis with (O := T O) (B := T B).
+  - destruct (T O) as [ox oy]. simpl in HTO. injection HTO. intros. exact H0.
+  - destruct (T O) as [ox oy]. simpl in HTO. injection HTO. intros. exact H.
+  - exact HTB.
+  - exact HTBx.
+  - exact Hcol'.
+Qed.
+
+(** * Section 17: Coordinate-Free Validity *)
+
+(** Coordinate-free linkage validity: only distance constraints *)
+(** The same-side condition (B-O)·(D-O) > 0 ensures B and D are on the same
+    side of O along their common line, which is the working configuration. *)
+Definition linkage_valid_coord_free (O A B C D : Point) (L s : R) : Prop :=
+  dist_sq O A = L * L /\
+  dist_sq O C = L * L /\
+  dist_sq A B = s * s /\
+  dist_sq B C = s * s /\
+  dist_sq C D = s * s /\
+  dist_sq D A = s * s /\
+  L > s /\ s > 0 /\
+  A <> C /\ B <> D /\
+  dot_product_from O B D > 0.
+
+(** Rigid transforms preserve coordinate-free validity *)
+Lemma rigid_preserves_validity : forall T O A B C D L s,
+  is_rigid T ->
+  linkage_valid_coord_free O A B C D L s ->
+  linkage_valid_coord_free (T O) (T A) (T B) (T C) (T D) L s.
+Proof.
+  intros T O A B C D L s HT Hvalid.
+  destruct Hvalid as [HOA [HOC [HAB [HBC [HCD [HDA [HLs [Hs [HAC [HBD Hdot]]]]]]]]]].
+  unfold linkage_valid_coord_free.
+  repeat split.
+  - rewrite (rigid_preserves_dist_sq T O A HT). exact HOA.
+  - rewrite (rigid_preserves_dist_sq T O C HT). exact HOC.
+  - rewrite (rigid_preserves_dist_sq T A B HT). exact HAB.
+  - rewrite (rigid_preserves_dist_sq T B C HT). exact HBC.
+  - rewrite (rigid_preserves_dist_sq T C D HT). exact HCD.
+  - rewrite (rigid_preserves_dist_sq T D A HT). exact HDA.
+  - exact HLs.
+  - exact Hs.
+  - apply rigid_preserves_neq; assumption.
+  - apply rigid_preserves_neq; assumption.
+  - rewrite (rigid_preserves_dot_product T O B D HT). exact Hdot.
+Qed.
+
+(** Product formula is coordinate-invariant: reduction to standard position *)
+Theorem product_formula_coord_free : forall O A B C D L s,
+  linkage_valid_coord_free O A B C D L s ->
+  dist O B > 0 ->
+  dist_sq O B * dist_sq O D = (L * L - s * s) * (L * L - s * s).
+Proof.
+  intros O A B C D L s Hvalid HdistB.
+  destruct Hvalid as [HOA [HOC [HAB [HBC [HCD [HDA [HLs [Hs [HAC [HBD Hdot]]]]]]]]]].
+  set (T := normalize_transform O B).
+  assert (Hrigid: is_rigid T) by (apply normalize_is_rigid; exact HdistB).
+  assert (Hinv: dist_sq O B * dist_sq O D = dist_sq (T O) (T B) * dist_sq (T O) (T D)).
+  { rewrite (rigid_preserves_dist_sq T O B Hrigid).
+    rewrite (rigid_preserves_dist_sq T O D Hrigid). reflexivity. }
+  rewrite Hinv.
+  assert (HTO: T O = (0, 0)) by apply normalize_O_at_origin.
+  assert (HTB_y: snd (T B) = 0) by (apply normalize_B_on_xaxis; exact HdistB).
+  assert (Hcol: collinear O B D).
+  { apply linkage_OBD_collinear with (L := L) (s := s) (A := A) (C := C); try assumption.
+    unfold px, py. destruct A as [ax ay], C as [cx cy].
+    destruct (Req_dec ax cx) as [Hxeq|Hxneq].
+    - right. intros Hyeq. apply HAC. f_equal; assumption.
+    - left. exact Hxneq. }
+  assert (HTD_y: snd (T D) = 0) by (apply normalize_D_on_xaxis; assumption).
+  assert (HTBneqTD: T B <> T D) by (apply rigid_preserves_neq; assumption).
+  assert (HTAneqTC: T A <> T C) by (apply rigid_preserves_neq; assumption).
+  apply (product_formula_no_symmetry_assumption (T O) (T A) (T B) (T C) (T D) L s).
+  - destruct (T O). simpl in HTO. injection HTO. intros. exact H0.
+  - destruct (T O). simpl in HTO. injection HTO. intros. exact H.
+  - exact HTB_y.
+  - exact HTD_y.
+  - exact HTBneqTD.
+  - exact HTAneqTC.
+  - rewrite (rigid_preserves_dist_sq T O A Hrigid). exact HOA.
+  - rewrite (rigid_preserves_dist_sq T O C Hrigid). exact HOC.
+  - rewrite (rigid_preserves_dist_sq T A B Hrigid). exact HAB.
+  - rewrite (rigid_preserves_dist_sq T B C Hrigid). exact HBC.
+  - rewrite (rigid_preserves_dist_sq T C D Hrigid). exact HCD.
+  - rewrite (rigid_preserves_dist_sq T D A Hrigid). exact HDA.
+  - exact HLs.
+  - exact Hs.
+Qed.
+
+(** ========== ULTIMATE COORDINATE-FREE THEOREM ========== *)
+(**
+    The Peaucellier-Lipkin Straight-Line Theorem in General Position:
+
+    D satisfies the perpendicular line condition, which is coordinate-invariant.
+    The condition dot_product_from O M D = k²/2 defines a line perpendicular
+    to OM at distance k²/(2|OM|) from O.
+*)
+
+Theorem peaucellier_straight_line_general : forall O A B C D M L s r,
+  linkage_valid_coord_free O A B C D L s ->
+  dist O B > 0 ->
+  B_on_circle_through_O_general O B M r ->
+  D_on_perp_line_general O M D (inversion_radius L s).
+Proof.
+  intros O A B C D M L s r Hvalid HdistB HBcirc.
+  destruct HBcirc as [HOM [Hr HBM]].
+  destruct Hvalid as [HOA [HOC [HAB [HBC [HCD [HDA [HLs [Hs [HAC [HBD Hdot_BD]]]]]]]]]].
+  unfold D_on_perp_line_general, inversion_radius.
+  assert (Hksq_pos: L * L - s * s > 0) by nra.
+  rewrite sqrt_sqrt by lra.
+  assert (Hprod: dist_sq O B * dist_sq O D = (L * L - s * s) * (L * L - s * s)).
+  { apply product_formula_coord_free with (A := A) (C := C).
+    - unfold linkage_valid_coord_free. repeat split; assumption.
+    - exact HdistB. }
+  assert (Hcol: collinear O B D).
+  { apply linkage_OBD_collinear with (L := L) (s := s) (A := A) (C := C); try assumption.
+    unfold px, py. destruct A as [ax ay], C as [cx cy].
+    destruct (Req_dec ax cx) as [Hxeq|Hxneq].
+    - right. intros Hyeq. apply HAC. simpl in *. rewrite Hxeq, Hyeq. reflexivity.
+    - left. exact Hxneq. }
+  assert (HBM': dist M B = r) by (rewrite dist_sym; exact HBM).
+  unfold dot_product_from, dist, dist_sq, px, py, Rsqr in *.
+  set (Mx := fst M - fst O). set (My := snd M - snd O).
+  set (Bx := fst B - fst O). set (By := snd B - snd O).
+  set (Dx := fst D - fst O). set (Dy := snd D - snd O).
+  assert (HOM_sq: Mx * Mx + My * My = r * r).
+  { unfold Mx, My. apply sqrt_eq_implies_sq_eq.
+    - apply Rplus_le_le_0_compat; apply Rle_0_sqr.
+    - left; exact Hr.
+    - exact HOM. }
+  assert (HBM_sq: (Mx - Bx) * (Mx - Bx) + (My - By) * (My - By) = r * r).
+  { unfold Mx, My, Bx, By.
+    replace (fst M - fst O - (fst B - fst O)) with (fst M - fst B) by ring.
+    replace (snd M - snd O - (snd B - snd O)) with (snd M - snd B) by ring.
+    apply sqrt_eq_implies_sq_eq.
+    - apply Rplus_le_le_0_compat; apply Rle_0_sqr.
+    - left; exact Hr.
+    - replace ((fst M - fst B) * (fst M - fst B)) with ((fst B - fst M) * (fst B - fst M)) by ring.
+      replace ((snd M - snd B) * (snd M - snd B)) with ((snd B - snd M) * (snd B - snd M)) by ring.
+      exact HBM'. }
+  assert (HdotMB: Mx * Bx + My * By = (Bx * Bx + By * By) / 2).
+  { assert (Hexp: (Mx - Bx)*(Mx - Bx) + (My - By)*(My - By) =
+                  Mx*Mx + My*My + Bx*Bx + By*By - 2*(Mx*Bx + My*By)) by ring.
+    rewrite HBM_sq, HOM_sq in Hexp. lra. }
+  assert (HBsq_pos: Bx * Bx + By * By > 0).
+  { assert (H: dist_sq O B > 0) by (apply dist_pos_implies_dist_sq_pos; exact HdistB).
+    unfold dist_sq, px, py, Rsqr, Bx, By in *. exact H. }
+  unfold collinear, px, py in Hcol. fold Bx By Dx Dy in Hcol.
+  assert (Hprod': (Bx*Bx + By*By) * (Dx*Dx + Dy*Dy) = (L*L - s*s) * (L*L - s*s)).
+  { unfold dist_sq, px, py, Rsqr, Bx, By, Dx, Dy in Hprod. exact Hprod. }
+  assert (Hgoal: Mx * Dx + My * Dy = (L * L - s * s) / 2).
+  assert (Hdot_pos: Bx * Dx + By * Dy > 0).
+  { unfold dot_product_from, Bx, By, Dx, Dy in Hdot_BD. exact Hdot_BD. }
+  { destruct (Req_dec Bx 0) as [HBx0|HBx_nz].
+    - assert (By_nz: By <> 0) by (rewrite HBx0 in HBsq_pos; nra).
+      assert (HDx0: Dx = 0) by (rewrite HBx0 in Hcol; nra).
+      assert (HByDy_pos: By * Dy > 0) by (rewrite HBx0, HDx0 in Hdot_pos; nra).
+      assert (HDyprod: By * Dy = L*L - s*s).
+      { rewrite HBx0, HDx0 in Hprod'.
+        assert (H: By * By * (Dy * Dy) = (L*L - s*s) * (L*L - s*s)) by nra.
+        assert (Habs: Rabs (By * Dy) = Rabs (L*L - s*s)).
+        { apply Rsqr_eq_abs_0. unfold Rsqr. nra. }
+        rewrite Rabs_right in Habs by lra.
+        rewrite Rabs_right in Habs by lra.
+        exact Habs. }
+      assert (HMy_half: My = By / 2) by (rewrite HBx0 in HdotMB; nra).
+      rewrite HDx0, HMy_half. field_simplify. rewrite HDyprod. lra.
+    - destruct (Req_dec By 0) as [HBy0|HBy_nz].
+      + assert (HDy0: Dy = 0) by (rewrite HBy0 in Hcol; nra).
+        assert (HBxDx_pos: Bx * Dx > 0) by (rewrite HBy0, HDy0 in Hdot_pos; nra).
+        assert (HDxprod: Bx * Dx = L*L - s*s).
+        { rewrite HBy0, HDy0 in Hprod'.
+          assert (H: Bx * Bx * (Dx * Dx) = (L*L - s*s) * (L*L - s*s)) by nra.
+          assert (Habs: Rabs (Bx * Dx) = Rabs (L*L - s*s)).
+          { apply Rsqr_eq_abs_0. unfold Rsqr. nra. }
+          rewrite Rabs_right in Habs by lra.
+          rewrite Rabs_right in Habs by lra.
+          exact Habs. }
+        assert (HMx_half: Mx = Bx / 2) by (rewrite HBy0 in HdotMB; nra).
+        rewrite HDy0, HMx_half. field_simplify. rewrite HDxprod. lra.
+      + assert (Hratio: Dx / Bx = Dy / By).
+        { assert (Hcross: Bx * Dy = By * Dx) by lra.
+          apply Rmult_eq_reg_r with (r := Bx); [|exact HBx_nz].
+          apply Rmult_eq_reg_r with (r := By); [|exact HBy_nz].
+          field_simplify; [|exact HBy_nz|exact HBx_nz]. lra. }
+        set (k := Dx / Bx).
+        assert (HDx_k: Dx = k * Bx) by (unfold k; field; exact HBx_nz).
+        assert (HDy_k: Dy = k * By).
+        { unfold k.
+          assert (H: Dy / By * By = Dx / Bx * By).
+          { rewrite Hratio. reflexivity. }
+          field_simplify in H; [|exact HBx_nz|exact HBy_nz].
+          replace (Dx / Bx * By) with (By * Dx / Bx) by (field; exact HBx_nz).
+          exact H. }
+        assert (Hk2: k * k = (L*L - s*s) * (L*L - s*s) / ((Bx*Bx + By*By) * (Bx*Bx + By*By))).
+        { rewrite HDx_k, HDy_k in Hprod'.
+          replace ((k*Bx)*(k*Bx) + (k*By)*(k*By)) with (k*k*(Bx*Bx + By*By)) in Hprod' by ring.
+          assert (HBsq_nz: Bx*Bx + By*By <> 0) by lra.
+          assert (HBsq2_nz: (Bx*Bx + By*By) * (Bx*Bx + By*By) <> 0) by nra.
+          assert (HBsq2_pos: (Bx*Bx + By*By) * (Bx*Bx + By*By) > 0) by nra.
+          assert (Hprod'': k*k * ((Bx*Bx + By*By) * (Bx*Bx + By*By)) = (L*L - s*s) * (L*L - s*s)).
+          { nra. }
+          apply Rmult_eq_reg_r with (r := (Bx*Bx + By*By) * (Bx*Bx + By*By)); try assumption.
+          field_simplify; nra. }
+        assert (Hk_val: k = (L*L - s*s) / (Bx*Bx + By*By) \/ k = -(L*L - s*s) / (Bx*Bx + By*By)).
+        { assert (Hk2': k² = ((L*L - s*s) / (Bx*Bx + By*By))²).
+          { unfold Rsqr. rewrite Hk2.
+            assert (HBsq_nz: Bx*Bx + By*By <> 0) by lra.
+            field. nra. }
+          apply Rsqr_eq in Hk2'.
+          destruct Hk2'; [left|right]; lra. }
+        rewrite HDx_k, HDy_k.
+        replace (Mx * (k * Bx) + My * (k * By)) with (k * (Mx * Bx + My * By)) by ring.
+        rewrite HdotMB.
+        destruct Hk_val as [Hk_pos|Hk_neg].
+        * rewrite Hk_pos. field. lra.
+        * rewrite Hk_neg. field_simplify; [|lra].
+          exfalso.
+          assert (HBDsame_side: Bx * Dx + By * Dy > 0 \/ Bx * Dx + By * Dy < 0 \/ Bx * Dx + By * Dy = 0).
+          { lra. }
+          rewrite HDx_k, HDy_k in HBDsame_side.
+          replace (Bx * (k * Bx) + By * (k * By)) with (k * (Bx*Bx + By*By)) in HBDsame_side by ring.
+          rewrite Hk_neg in HBDsame_side.
+          assert (Hneg: -(L*L - s*s) / (Bx*Bx + By*By) * (Bx*Bx + By*By) < 0).
+          { field_simplify; [|lra]. nra. }
+          nra. }
+  exact Hgoal.
+Qed.
+

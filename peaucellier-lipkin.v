@@ -2850,3 +2850,35 @@ Proof.
   exact Hgoal.
 Qed.
 
+(** * Future Work and Known Gaps
+
+    1. SINGULARITY ANALYSIS (B = O):
+       - Prove: B on circle through O with r > 0 implies B ≠ O (isolated singularity)
+       - Prove: As |OB| → 0, |OD| → ∞ (D escapes to infinity)
+       - Physical interpretation: rigid bars cannot extend infinitely
+
+    2. SURJECTIVITY (Circle-Tracing):
+       - Current theorem: D lies ON the output line
+       - Missing: D traces the ENTIRE line as B traverses its circle
+       - Requires: showing the map B ↦ D is surjective onto the line
+
+    3. INTRINSIC PRODUCT FORMULA:
+       - Current: product_formula_standard uses O at origin, B/D on x-axis
+       - Improvement: purely inner-product proof without coordinates
+       - Approach: use |OB|²|OD|² = (⟨OB,OD⟩/|OB||OD|)² · |OB|²|OD|² with collinearity
+
+    4. MECHANISM RANGE:
+       - Prove: valid configurations require |L-s| < |OB| < L+s
+       - Prove: D's range on line is bounded by these constraints
+
+    5. INVERSE KINEMATICS:
+       - Given D on output line, compute corresponding B position
+       - Prove uniqueness (up to reflection) of the inverse
+
+    6. ORGANIZATIONAL REFACTOR:
+       - Extract rigid transformation library
+       - Consolidate scattered helper lemmas (e.g., sqrt properties, Rsqr lemmas)
+       - Unify linkage validity definitions (linkage_valid, linkage_valid_sq,
+         linkage_valid_general, linkage_geometric, linkage_geometric_minimal, etc.)
+       - Group product formula variants together
+*)
